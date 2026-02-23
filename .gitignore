@@ -29,3 +29,4 @@ Thumbs.db
 
 #js
 node_modules/
+frontend/package-lock.json
