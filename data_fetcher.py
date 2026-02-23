@@ -38,13 +38,21 @@ def get_realtime_quotes(symbols=None):
 def get_historical_data(symbol, period='daily', start_date=None, end_date=None):
     """获取历史K线数据"""
     try:
-        df = ak.stock_zh_a_hist(
-            symbol=symbol,
-            period=period,
-            start_date=start_date or (datetime.now().strftime('%Y%m%d') if start_date is None else start_date),
-            end_date=end_date or datetime.now().strftime('%Y%m%d'),
-            adjust="qfq"
-        )
+        # 确保 symbol 是字符串类型，并且补零到6位
+        symbol = str(symbol).zfill(6)
+
+        # 设置默认日期：不指定 start_date 时获取所有可用数据
+        kwargs = {
+            'symbol': symbol,
+            'period': period,
+            'adjust': "qfq"
+        }
+        if start_date is not None:
+            kwargs['start_date'] = start_date
+        if end_date is not None:
+            kwargs['end_date'] = end_date
+
+        df = ak.stock_zh_a_hist(**kwargs)
         return df
     except Exception as e:
         print(f"获取 {symbol} 历史数据失败: {e}")
@@ -71,20 +79,30 @@ def get_market_value(symbol):
         return None
 
 
-def fetch_and_save_data():
-    """获取所有数据并保存到CSV"""
-    
+def fetch_and_save_data(force_refresh=False):
+    """获取所有数据并保存到CSV
+
+    Args:
+        force_refresh: 是否强制刷新数据，即使本地CSV已存在
+    """
+
     print("=" * 50)
     print("开始获取A股数据...")
     print("=" * 50)
-    
-    # 1. 获取实时行情
-    realtime_df = get_realtime_quotes()
-    
-    # 保存实时行情
+
+    # 1. 获取实时行情（如果本地有CSV且不强制刷新，则从本地加载）
     realtime_file = os.path.join(DATA_DIR, 'realtime_quotes.csv')
-    realtime_df.to_csv(realtime_file, index=False, encoding='utf-8-sig')
-    print(f"实时行情已保存到: {realtime_file}")
+
+    if not force_refresh and os.path.exists(realtime_file):
+        print(f"从本地文件加载实时行情: {realtime_file}")
+        # 读取时保持股票代码为字符串类型
+        realtime_df = pd.read_csv(realtime_file, dtype={'代码': str})
+        print(f"加载到 {len(realtime_df)} 条行情数据")
+    else:
+        realtime_df = get_realtime_quotes()
+        # 保存实时行情
+        realtime_df.to_csv(realtime_file, index=False, encoding='utf-8-sig')
+        print(f"实时行情已保存到: {realtime_file}")
     
     # 2. 筛选符合尾盘选股条件的股票
     # 条件1: 涨幅在2%-5%之间
@@ -103,7 +121,11 @@ def fetch_and_save_data():
     
     # 解析换手率
     if '换手率' in realtime_df.columns:
-        realtime_df['换手率'] = pd.to_numeric(realtime_df['换手率'].str.replace('%', ''), errors='coerce')
+        # 先检查列类型，如果是字符串则去除%，否则直接转换
+        if pd.api.types.is_string_dtype(realtime_df['换手率']):
+            realtime_df['换手率'] = pd.to_numeric(realtime_df['换手率'].str.replace('%', ''), errors='coerce')
+        else:
+            realtime_df['换手率'] = pd.to_numeric(realtime_df['换手率'], errors='coerce')
         condition_turnover = (realtime_df['换手率'] >= 4) & (realtime_df['换手率'] <= 10)
     else:
         condition_turnover = pd.Series([False] * len(realtime_df), index=realtime_df.index)
@@ -168,18 +190,18 @@ def load_data_from_csv():
     realtime_file = os.path.join(DATA_DIR, 'realtime_quotes.csv')
     filtered_file = os.path.join(DATA_DIR, 'filtered_stocks.csv')
     history_file = os.path.join(DATA_DIR, 'historical_data.csv')
-    
+
     data = {}
-    
+
     if os.path.exists(realtime_file):
-        data['realtime'] = pd.read_csv(realtime_file)
-    
+        data['realtime'] = pd.read_csv(realtime_file, dtype={'代码': str})
+
     if os.path.exists(filtered_file):
-        data['filtered'] = pd.read_csv(filtered_file)
-    
+        data['filtered'] = pd.read_csv(filtered_file, dtype={'代码': str})
+
     if os.path.exists(history_file):
-        data['history'] = pd.read_csv(history_file)
-    
+        data['history'] = pd.read_csv(history_file, dtype={'symbol': str})
+
     return data
 
 
