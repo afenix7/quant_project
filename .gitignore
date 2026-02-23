@@ -30,3 +30,17 @@ Thumbs.db
 #js
 node_modules/
 frontend/package-lock.json
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Docker
+docker-compose.override.yml
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo

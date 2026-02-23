@@ -7,26 +7,86 @@ import sys
 import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
+from datetime import datetime, timedelta
 import pandas as pd
-from datetime import datetime
 import backtrader as bt
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+from sqlalchemy import create_engine, Column, String, DateTime, Boolean
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import sessionmaker, Session
 
 from data_fetcher import fetch_and_save_data, get_historical_data
 
-app = FastAPI(title="尾盘选股策略回测 API")
+# 配置
+SECRET_KEY = "quant-project-secret-key-2024"
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24小时
 
-# 允许 CORS
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# 固定密码
+FIXED_PASSWORD = "cjhyshlm901"
+FIXED_USERNAME = "admin"
+
+# 数据库配置
+DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://quant_user:quant_password@localhost:5432/quant_db")
+
+# SQLAlchemy 设置
+engine = create_engine(DATABASE_URL)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+Base = declarative_base()
+
+# 密码哈希
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# 安全模式
+security = HTTPBearer()
+
+
+# 数据库模型
+class User(Base):
+    __tablename__ = "users"
+    username = Column(String, primary_key=True, index=True)
+    hashed_password = Column(String)
+    is_active = Column(Boolean, default=True)
+
+
+class TokenBlacklist(Base):
+    __tablename__ = "token_blacklist"
+    token = Column(String, primary_key=True, index=True)
+    expires_at = Column(DateTime)
+
+
+# 创建表
+def init_db():
+    try:
+        Base.metadata.create_all(bind=engine)
+        # 初始化默认用户
+        db = SessionLocal()
+        user = db.query(User).filter(User.username == FIXED_USERNAME).first()
+        if not user:
+            hashed = pwd_context.hash(FIXED_PASSWORD)
+            db_user = User(username=FIXED_USERNAME, hashed_password=hashed)
+            db.add(db_user)
+            db.commit()
+        db.close()
+    except Exception as e:
+        print(f"数据库初始化失败: {e}")
+
+
+# Pydantic 模型
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
 
 
 class BacktestRequest(BaseModel):
@@ -73,6 +133,104 @@ class BacktestResult(BaseModel):
     trades: List[TradeRecord]
     equity_curve: List[EquityPoint]
     stock_data: Dict[str, List[StockDataPoint]]
+
+
+# FastAPI 应用
+app = FastAPI(title="尾盘选股策略回测 API")
+
+# 允许 CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+# 数据库依赖
+def get_db():
+    db = SessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+# JWT 工具函数
+def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
+    to_encode = data.copy()
+    if expires_delta:
+        expire = datetime.utcnow() + expires_delta
+    else:
+        expire = datetime.utcnow() + timedelta(minutes=15)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return encoded_jwt
+
+
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="无法验证凭据",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    try:
+        token = credentials.credentials
+        # 检查 token 是否在黑名单
+        blacklisted = db.query(TokenBlacklist).filter(TokenBlacklist.token == token).first()
+        if blacklisted:
+            raise credentials_exception
+
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise credentials_exception
+    except JWTError:
+        raise credentials_exception
+    user = db.query(User).filter(User.username == username).first()
+    if user is None:
+        raise credentials_exception
+    return user
+
+
+# 登录端点
+@app.post("/api/login", response_model=Token)
+async def login(request: LoginRequest, db: Session = Depends(get_db)):
+    """登录获取 access token"""
+    user = db.query(User).filter(User.username == request.username).first()
+    if not user or not pwd_context.verify(request.password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="用户名或密码错误",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(
+        data={"sub": user.username}, expires_delta=access_token_expires
+    )
+    return {"access_token": access_token, "token_type": "bearer"}
+
+
+@app.post("/api/logout")
+async def logout(credentials: HTTPAuthorizationCredentials = Depends(security), db: Session = Depends(get_db)):
+    """登出，将 token 加入黑名单"""
+    token = credentials.credentials
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        expires_at = datetime.fromtimestamp(payload["exp"])
+    except JWTError:
+        expires_at = datetime.utcnow() + timedelta(hours=1)
+
+    blacklisted = TokenBlacklist(token=token, expires_at=expires_at)
+    db.add(blacklisted)
+    db.commit()
+    return {"success": True, "message": "登出成功"}
+
+
+@app.get("/api/health")
+async def health_check():
+    return {"status": "ok", "timestamp": datetime.now().isoformat()}
 
 
 # 自定义策略，记录交易
@@ -210,14 +368,9 @@ def dataframe_to_backtrader(df, symbol, date_col='日期'):
     return data
 
 
-@app.get("/api/health")
-async def health_check():
-    return {"status": "ok", "timestamp": datetime.now().isoformat()}
-
-
 @app.post("/api/backtest", response_model=BacktestResult)
-async def run_backtest(request: BacktestRequest):
-    """运行回测并返回结果"""
+async def run_backtest(request: BacktestRequest, current_user: User = Depends(get_current_user)):
+    """运行回测并返回结果（需要认证）"""
     try:
         print(f"开始回测: 初始资金={request.initial_cash}, 刷新数据={request.force_refresh}")
 
@@ -391,8 +544,8 @@ async def run_backtest(request: BacktestRequest):
 
 
 @app.get("/api/stocks")
-async def get_stocks():
-    """获取筛选后的股票列表"""
+async def get_stocks(current_user: User = Depends(get_current_user)):
+    """获取筛选后的股票列表（需要认证）"""
     try:
         from data_fetcher import load_data_from_csv
         data = load_data_from_csv()
@@ -405,6 +558,12 @@ async def get_stocks():
         return {'success': False, 'stocks': []}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# 启动时初始化数据库
+@app.on_event("startup")
+async def startup_event():
+    init_db()
 
 
 if __name__ == "__main__":

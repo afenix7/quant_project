@@ -1,10 +1,102 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ComposedChart, Bar, Scatter } from 'recharts';
 import './App.css';
 
 const API_BASE = 'http://localhost:8000';
 
-function App() {
+// 认证工具函数
+const getToken = () => localStorage.getItem('auth_token');
+const setToken = (token) => localStorage.setItem('auth_token', token);
+const removeToken = () => localStorage.removeItem('auth_token');
+
+const apiRequest = async (url, options = {}) => {
+  const token = getToken();
+  const headers = {
+    'Content-Type': 'application/json',
+    ...options.headers,
+  };
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  const response = await fetch(`${API_BASE}${url}`, {
+    ...options,
+    headers,
+  });
+  return response;
+};
+
+function LoginPage({ onLogin }) {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError('');
+    try {
+      const response = await fetch(`${API_BASE}/api/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username, password }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.detail || '登录失败');
+      }
+
+      const data = await response.json();
+      setToken(data.access_token);
+      onLogin();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="login-container">
+      <div className="login-box">
+        <h1>尾盘选股策略回测系统</h1>
+        <p className="login-subtitle">请登录以继续</p>
+        <form onSubmit={handleSubmit} className="login-form">
+          <div className="form-group">
+            <label>用户名</label>
+            <input
+              type="text"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="请输入用户名"
+              required
+            />
+          </div>
+          <div className="form-group">
+            <label>密码</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="请输入密码"
+              required
+            />
+          </div>
+          {error && <div className="login-error">{error}</div>}
+          <button type="submit" className="login-btn" disabled={loading}>
+            {loading ? '登录中...' : '登录'}
+          </button>
+        </form>
+        <div className="login-hint">
+          <p>提示：用户名 admin</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BacktestApp({ onLogout }) {
   const [initialCash, setInitialCash] = useState(100000);
   const [forceRefresh, setForceRefresh] = useState(false);
   const [stockLimit, setStockLimit] = useState(10);
@@ -25,15 +117,22 @@ function App() {
     return `${value?.toFixed(2) || '0.00'}%`;
   };
 
+  const handleLogout = async () => {
+    try {
+      await apiRequest('/api/logout', { method: 'POST' });
+    } catch (e) {
+      // 忽略登出错误
+    }
+    removeToken();
+    onLogout();
+  };
+
   const runBacktest = async () => {
     setLoading(true);
     setError(null);
     try {
-      const response = await fetch(`${API_BASE}/api/backtest`, {
+      const response = await apiRequest('/api/backtest', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
         body: JSON.stringify({
           initial_cash: initialCash,
           force_refresh: forceRefresh,
@@ -41,8 +140,15 @@ function App() {
         }),
       });
 
+      if (response.status === 401) {
+        removeToken();
+        onLogout();
+        throw new Error('登录已过期，请重新登录');
+      }
+
       if (!response.ok) {
-        throw new Error('回测请求失败');
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.detail || '回测请求失败');
       }
 
       const data = await response.json();
@@ -92,8 +198,15 @@ function App() {
   return (
     <div className="container">
       <header className="header">
-        <h1>尾盘选股策略 - 回测系统</h1>
-        <p>基于均线多头排列的尾盘选股策略回测分析</p>
+        <div className="header-content">
+          <div>
+            <h1>尾盘选股策略 - 回测系统</h1>
+            <p>基于均线多头排列的尾盘选股策略回测分析</p>
+          </div>
+          <button className="logout-btn" onClick={handleLogout}>
+            退出登录
+          </button>
+        </div>
       </header>
 
       <div className="control-panel">
@@ -324,6 +437,36 @@ function App() {
       )}
     </div>
   );
+}
+
+function App() {
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isChecking, setIsChecking] = useState(true);
+
+  useEffect(() => {
+    const token = getToken();
+    setIsAuthenticated(!!token);
+    setIsChecking(false);
+  }, []);
+
+  if (isChecking) {
+    return (
+      <div className="login-container">
+        <div className="login-box">
+          <div className="loading">
+            <div className="spinner"></div>
+            <p>加载中...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <LoginPage onLogin={() => setIsAuthenticated(true)} />;
+  }
+
+  return <BacktestApp onLogout={() => setIsAuthenticated(false)} />;
 }
 
 export default App;
