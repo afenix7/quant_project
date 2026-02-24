@@ -9,6 +9,10 @@ PROJECT_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 AGENTS_DIR = os.path.join(PROJECT_DIR, ".claude", "agents")
 SKILLS_DIR = os.path.join(PROJECT_DIR, ".claude", "skills")
 
+os.environ["ANTHROPIC_BASE_URL"] = "https://api.minimaxi.com/anthropic"
+os.environ["ANTHROPIC_API_KEY"] = "sk-cp-VQK8QjxOSd2I1LOW-snNGyEzir0QjgRjgiF44JD-949wSiyTZBHNv_-NG0vhW91sZBw_PU_iklRNf6P8fDsaWsGXcGH9vqJJ84vpiqPmw3YOwwNTUrffQUU"
+os.environ["ANTHROPIC_MODEL_NAME"] = "MiniMax-M2.5"
+
 
 def load_agent_prompt(agent_name: str) -> str:
     agent_file = os.path.join(AGENTS_DIR, f"{agent_name}.md")
