@@ -97,6 +97,7 @@ function LoginPage({ onLogin }) {
 }
 
 function BacktestApp({ onLogout }) {
+  const [activeTab, setActiveTab] = useState('backtest');
   const [initialCash, setInitialCash] = useState(100000);
   const [forceRefresh, setForceRefresh] = useState(false);
   const [stockLimit, setStockLimit] = useState(10);
@@ -104,6 +105,11 @@ function BacktestApp({ onLogout }) {
   const [error, setError] = useState(null);
   const [result, setResult] = useState(null);
   const [selectedStock, setSelectedStock] = useState(null);
+  
+  const [analyzeCode, setAnalyzeCode] = useState('');
+  const [analyzeName, setAnalyzeName] = useState('');
+  const [analyzeResult, setAnalyzeResult] = useState(null);
+  const [analyzeLoading, setAnalyzeLoading] = useState(false);
 
   const formatCurrency = (value) => {
     return new Intl.NumberFormat('zh-CN', {
@@ -195,52 +201,107 @@ function BacktestApp({ onLogout }) {
     return result.equity_curve;
   };
 
+  const runAnalyze = async () => {
+    if (!analyzeCode) {
+      setError('请输入股票代码');
+      return;
+    }
+    setAnalyzeLoading(true);
+    setError(null);
+    setAnalyzeResult(null);
+    try {
+      const response = await apiRequest('/api/analyze', {
+        method: 'POST',
+        body: JSON.stringify({
+          code: analyzeCode,
+          name: analyzeName
+        }),
+      });
+
+      if (response.status === 401) {
+        removeToken();
+        onLogout();
+        throw new Error('登录已过期，请重新登录');
+      }
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.detail || '分析请求失败');
+      }
+
+      const data = await response.json();
+      setAnalyzeResult(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setAnalyzeLoading(false);
+    }
+  };
+
   return (
     <div className="container">
       <header className="header">
         <div className="header-content">
           <div>
-            <h1>尾盘选股策略 - 回测系统</h1>
-            <p>基于均线多头排列的尾盘选股策略回测分析</p>
+            <h1>量化投资系统</h1>
+            <p>尾盘选股策略回测与股票分析</p>
           </div>
-          <button className="logout-btn" onClick={handleLogout}>
-            退出登录
-          </button>
+          <div className="header-actions">
+            <div className="tabs">
+              <button 
+                className={`tab ${activeTab === 'backtest' ? 'active' : ''}`}
+                onClick={() => setActiveTab('backtest')}
+              >
+                回测分析
+              </button>
+              <button 
+                className={`tab ${activeTab === 'analyze' ? 'active' : ''}`}
+                onClick={() => setActiveTab('analyze')}
+              >
+                股票分析
+              </button>
+            </div>
+            <button className="logout-btn" onClick={handleLogout}>
+              退出登录
+            </button>
+          </div>
         </div>
       </header>
 
-      <div className="control-panel">
-        <h2>回测参数</h2>
-        <div className="input-group">
-          <div className="input-item">
-            <label>初始资金</label>
-            <input
-              type="number"
-              value={initialCash}
-              onChange={(e) => setInitialCash(Number(e.target.value))}
-            />
+      {activeTab === 'backtest' && (
+        <div className="control-panel">
+          <h2>回测参数</h2>
+          <div className="input-group">
+            <div className="input-item">
+              <label>初始资金</label>
+              <input
+                type="number"
+                value={initialCash}
+                onChange={(e) => setInitialCash(Number(e.target.value))}
+              />
+            </div>
+            <div className="input-item">
+              <label>股票数量限制</label>
+              <input
+                type="number"
+                value={stockLimit}
+                onChange={(e) => setStockLimit(Number(e.target.value))}
+              />
+            </div>
+            <div className="input-item">
+              <label>强制刷新数据</label>
+              <input
+                type="checkbox"
+                checked={forceRefresh}
+                onChange={(e) => setForceRefresh(e.target.checked)}
+              />
+            </div>
+            <button className="btn" onClick={runBacktest} disabled={loading}>
+              {loading ? '回测中...' : '开始回测'}
+            </button>
           </div>
-          <div className="input-item">
-            <label>股票数量限制</label>
-            <input
-              type="number"
-              value={stockLimit}
-              onChange={(e) => setStockLimit(Number(e.target.value))}
-            />
-          </div>
-          <div className="input-item">
-            <label>强制刷新数据</label>
-            <input
-              type="checkbox"
-              checked={forceRefresh}
-              onChange={(e) => setForceRefresh(e.target.checked)}
-            />
-          </div>
-          <button className="btn" onClick={runBacktest} disabled={loading}>
-            {loading ? '回测中...' : '开始回测'}
-          </button>
         </div>
-      </div>
+      )}
 
       {error && (
         <div className="error">
@@ -433,6 +494,164 @@ function BacktestApp({ onLogout }) {
       {!loading && !result && !error && (
         <div className="status-message">
           <p>点击"开始回测"按钮运行策略回测</p>
+        </div>
+      )}
+
+      {activeTab === 'analyze' && (
+        <div className="analyze-panel">
+          <div className="control-panel">
+            <h2>股票分析</h2>
+            <div className="input-group">
+              <div className="input-item">
+                <label>股票代码</label>
+                <input
+                  type="text"
+                  value={analyzeCode}
+                  onChange={(e) => setAnalyzeCode(e.target.value)}
+                  placeholder="例如: 600519"
+                />
+              </div>
+              <div className="input-item">
+                <label>股票名称(可选)</label>
+                <input
+                  type="text"
+                  value={analyzeName}
+                  onChange={(e) => setAnalyzeName(e.target.value)}
+                  placeholder="例如: 贵州茅台"
+                />
+              </div>
+              <button className="btn" onClick={runAnalyze} disabled={analyzeLoading}>
+                {analyzeLoading ? '分析中...' : '开始分析'}
+              </button>
+            </div>
+          </div>
+
+          {error && activeTab === 'analyze' && (
+            <div className="error">
+              <p>错误: {error}</p>
+            </div>
+          )}
+
+          {analyzeLoading && (
+            <div className="status-message">
+              <div className="loading">
+                <div className="spinner"></div>
+                <p>正在进行股票分析，请稍候...</p>
+              </div>
+            </div>
+          )}
+
+          {analyzeResult && analyzeResult.success && (
+            <div className="analysis-result">
+              <div className="analysis-header">
+                <h3>{analyzeResult.code} {analyzeResult.name}</h3>
+                <div className={`recommendation ${analyzeResult.recommendation.includes('卖出') ? 'sell' : analyzeResult.recommendation.includes('持有') ? 'hold' : 'buy'}`}>
+                  {analyzeResult.recommendation}
+                </div>
+              </div>
+              
+              <div className="score-display">
+                <div className="score-circle">
+                  <span className="score-value">{analyzeResult.score}</span>
+                  <span className="score-label">分</span>
+                </div>
+              </div>
+
+              {analyzeResult.quote && (
+                <div className="metrics">
+                  <div className="metric-card">
+                    <div className="label">当前价格</div>
+                    <div className="value">{analyzeResult.quote.price?.toFixed(2) || '-'}</div>
+                  </div>
+                  <div className="metric-card">
+                    <div className="label">涨跌幅</div>
+                    <div className={`value ${analyzeResult.quote.change_pct >= 0 ? 'positive' : 'negative'}`}>
+                      {analyzeResult.quote.change_pct?.toFixed(2) || '0.00'}%
+                    </div>
+                  </div>
+                  <div className="metric-card">
+                    <div className="label">换手率</div>
+                    <div className="value">{analyzeResult.quote.turnover?.toFixed(2) || '-'}%</div>
+                  </div>
+                  <div className="metric-card">
+                    <div className="label">成交量</div>
+                    <div className="value">{analyzeResult.quote.volume?.toFixed(2) || '-'}万</div>
+                  </div>
+                  <div className="metric-card">
+                    <div className="label">PE(TTM)</div>
+                    <div className="value">{analyzeResult.quote.pe?.toFixed(2) || '-'}</div>
+                  </div>
+                </div>
+              )}
+
+              {analyzeResult.fundamentals && (
+                <div className="analysis-section">
+                  <h4>基本面分析</h4>
+                  <div className="analysis-tags">
+                    <span className={`tag ${analyzeResult.fundamentals.valuation === 'undervalued' ? 'positive' : analyzeResult.fundamentals.valuation === 'overvalued' ? 'negative' : ''}`}>
+                      估值: {analyzeResult.fundamentals.valuation === 'undervalued' ? '低估' : analyzeResult.fundamentals.valuation === 'overvalued' ? '高估' : analyzeResult.fundamentals.valuation === 'fair' ? '合理' : '亏损'}
+                    </span>
+                    <span className="tag">
+                      流动性: {analyzeResult.fundamentals.liquidity === 'very_active' ? '非常活跃' : analyzeResult.fundamentals.liquidity === 'active' ? '活跃' : analyzeResult.fundamentals.liquidity === 'normal' ? '一般' : '清淡'}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {analyzeResult.technical && (
+                <div className="analysis-section">
+                  <h4>技术面分析</h4>
+                  <div className="analysis-tags">
+                    <span className={`tag ${analyzeResult.technical.trend?.includes('up') ? 'positive' : analyzeResult.technical.trend?.includes('down') ? 'negative' : ''}`}>
+                      趋势: {analyzeResult.technical.trend === 'strong_up' ? '强势上涨' : analyzeResult.technical.trend === 'slight_up' ? '小幅上涨' : analyzeResult.technical.trend === 'slight_down' ? '小幅下跌' : '强势下跌'}
+                    </span>
+                    <span className={`tag ${analyzeResult.technical.signal === 'overbought' ? 'negative' : analyzeResult.technical.signal === 'oversold' ? 'positive' : ''}`}>
+                      信号: {analyzeResult.technical.signal === 'overbought' ? '超买' : analyzeResult.technical.signal === 'oversold' ? '超卖' : analyzeResult.technical.signal === 'strong' ? '强势' : analyzeResult.technical.signal === 'weak' ? '弱势' : '中性'}
+                    </span>
+                    <span className="tag">
+                      量能: {analyzeResult.technical.volume_status === 'high_vol' ? '放量' : analyzeResult.technical.volume_status === 'vol_up' ? '量增' : analyzeResult.technical.volume_status === 'normal_vol' ? '正常' : '缩量'}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {analyzeResult.sentiment && (
+                <div className="analysis-section">
+                  <h4>情绪分析</h4>
+                  <div className="analysis-tags">
+                    <span className={`tag ${analyzeResult.sentiment.market_sentiment === 'optimistic' ? 'positive' : analyzeResult.sentiment.market_sentiment === 'panic' ? 'negative' : ''}`}>
+                      市场情绪: {analyzeResult.sentiment.market_sentiment === 'euphoric' ? '狂热' : analyzeResult.sentiment.market_sentiment === 'optimistic' ? '乐观' : analyzeResult.sentiment.market_sentiment === 'cautious' ? '谨慎' : '恐慌'}
+                    </span>
+                    <span className={`tag ${analyzeResult.sentiment.capital_flow?.includes('inflow') ? 'positive' : analyzeResult.sentiment.capital_flow === 'outflow' ? 'negative' : ''}`}>
+                      资金流向: {analyzeResult.sentiment.capital_flow === 'big_inflow' ? '大幅流入' : analyzeResult.sentiment.capital_flow === 'inflow' ? '流入' : analyzeResult.sentiment.capital_flow === 'balanced' ? '平衡' : '流出'}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              {analyzeResult.news && analyzeResult.news.headlines && analyzeResult.news.headlines.length > 0 && (
+                <div className="analysis-section">
+                  <h4>新闻动态</h4>
+                  <p className="news-sentiment">情绪: {analyzeResult.news.sentiment === 'positive' ? '正面' : analyzeResult.news.sentiment === 'negative' ? '负面' : '中性'}</p>
+                  <ul className="news-list">
+                    {analyzeResult.news.headlines.map((headline, idx) => (
+                      <li key={idx}>{headline}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <div className="analysis-disclaimer">
+                <p>本分析仅供参考，不构成投资建议。股市有风险，投资需谨慎。</p>
+              </div>
+            </div>
+          )}
+
+          {!analyzeLoading && !analyzeResult && activeTab === 'analyze' && (
+            <div className="status-message">
+              <p>输入股票代码，点击"开始分析"进行股票分析</p>
+            </div>
+          )}
         </div>
       )}
     </div>

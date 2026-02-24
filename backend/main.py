@@ -23,6 +23,13 @@ from sqlalchemy.orm import sessionmaker, Session
 
 from data_fetcher import fetch_and_save_data, get_historical_data
 
+# 尝试导入 requests
+try:
+    import requests
+    HAS_REQUESTS = True
+except ImportError:
+    HAS_REQUESTS = False
+
 # 配置
 SECRET_KEY = "quant-project-secret-key-2024"
 ALGORITHM = "HS256"
@@ -133,6 +140,25 @@ class BacktestResult(BaseModel):
     trades: List[TradeRecord]
     equity_curve: List[EquityPoint]
     stock_data: Dict[str, List[StockDataPoint]]
+
+
+class StockAnalysisRequest(BaseModel):
+    code: str
+    name: str = ""
+
+
+class StockAnalysisResult(BaseModel):
+    success: bool
+    message: str
+    code: str
+    name: str
+    quote: Optional[dict]
+    fundamentals: Optional[dict]
+    technical: Optional[dict]
+    sentiment: Optional[dict]
+    news: Optional[dict]
+    score: Optional[int]
+    recommendation: Optional[str]
 
 
 # FastAPI 应用
@@ -558,6 +584,282 @@ async def get_stocks(current_user: User = Depends(get_current_user)):
         return {'success': False, 'stocks': []}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# 股票分析相关函数
+def safe_div(a, b):
+    try:
+        return float(a) / float(b) if a and b else 0
+    except:
+        return 0
+
+
+def fetch_stock_data(code, name=""):
+    print(f"Fetching {code} {name}...")
+    results = {'quote': {}, 'news': []}
+    market = '1' if code.startswith('6') else '0'
+    headers = {'User-Agent': 'Mozilla/5.0'}
+    
+    def try_request(url, timeout=30, retries=3):
+        for i in range(retries):
+            try:
+                if HAS_REQUESTS:
+                    r = requests.get(url, headers=headers, timeout=timeout)
+                    return r.json()
+            except Exception as e:
+                print(f"  Attempt {i+1} failed: {e}")
+                if i < retries - 1:
+                    import time
+                    time.sleep(2)
+        return None
+    
+    try:
+        url = f"https://push2.eastmoney.com/api/qt/stock/get?secid={market}.{code}&fields=f43,f44,f45,f46,f47,f50,f51,f55,f57,f58,f59,f169,f170,f171"
+        data = try_request(url)
+        if data and data.get('data'):
+            results['quote'] = data['data']
+            print("  Quote OK")
+    except Exception as e:
+        print(f"  Quote failed: {e}")
+    try:
+        url = f"https://np-anotice-stock.eastmoney.com/api/security/ann?page=true&pageSize=10&stock={code}"
+        data = try_request(url)
+        if data and data.get('data') and data['data'].get('data'):
+            results['news'] = data['data']['data'][:5]
+            print("  News OK")
+    except Exception as e:
+        print(f"  News failed: {e}")
+    return results
+
+
+def parse_quote(data):
+    if not data:
+        return {}
+    return {
+        'price': safe_div(data.get('f43'), 100),
+        'change_pct': safe_div(data.get('f169'), 100),
+        'change': safe_div(data.get('f170'), 100),
+        'volume': safe_div(data.get('f46'), 10000),
+        'amount': safe_div(data.get('f47'), 100000000),
+        'turnover': safe_div(data.get('f50'), 100),
+        'pe': safe_div(data.get('f51'), 100),
+    }
+
+
+def analyze_fundamentals(data):
+    quote = parse_quote(data.get('quote', {}))
+    pe = quote.get('pe', 0)
+    if pe <= 0:
+        valuation = 'loss'
+    elif pe < 20:
+        valuation = 'undervalued'
+    elif pe < 50:
+        valuation = 'fair'
+    else:
+        valuation = 'overvalued'
+    turnover = quote.get('turnover', 0)
+    liquidity = 'very_active' if turnover > 10 else 'active' if turnover > 5 else 'normal' if turnover > 2 else 'low'
+    return {'valuation': valuation, 'liquidity': liquidity, 'pe': pe}
+
+
+def analyze_technical(data):
+    quote = parse_quote(data.get('quote', {}))
+    change_pct = quote.get('change_pct', 0)
+    volume = quote.get('volume', 0)
+    if change_pct > 3:
+        trend = 'strong_up'
+    elif change_pct > 0:
+        trend = 'slight_up'
+    elif change_pct > -3:
+        trend = 'slight_down'
+    else:
+        trend = 'strong_down'
+    if change_pct > 7:
+        signal = 'overbought'
+    elif change_pct < -7:
+        signal = 'oversold'
+    elif change_pct > 3:
+        signal = 'strong'
+    elif change_pct < -3:
+        signal = 'weak'
+    else:
+        signal = 'neutral'
+    vol_status = 'high_vol' if volume > 15 else 'vol_up' if volume > 8 else 'normal_vol' if volume > 4 else 'low_vol'
+    return {'trend': trend, 'signal': signal, 'volume_status': vol_status}
+
+
+def analyze_sentiment(data):
+    quote = parse_quote(data.get('quote', {}))
+    change_pct = quote.get('change_pct', 0)
+    turnover = quote.get('turnover', 0)
+    if change_pct > 7:
+        sentiment = 'euphoric'
+    elif change_pct > 3:
+        sentiment = 'optimistic'
+    elif change_pct > 0:
+        sentiment = 'cautious'
+    elif change_pct > -3:
+        sentiment = 'cautious'
+    else:
+        sentiment = 'panic'
+    capital = 'big_inflow' if turnover > 15 else 'inflow' if turnover > 8 else 'balanced' if turnover > 4 else 'outflow'
+    return {'market_sentiment': sentiment, 'capital_flow': capital}
+
+
+def analyze_news(data):
+    news_list = data.get('news', [])
+    if not news_list:
+        return {'headlines': [], 'sentiment': 'no news'}
+    headlines = []
+    for item in news_list[:5]:
+        title = item.get('title', '')[:50]
+        date = item.get('showtime', '')
+        headlines.append(f"{date} {title}")
+    pos_words = ['增长', '突破', '获批', '合作', '利好', '涨停']
+    neg_words = ['亏损', '减持', '风险', '调查', '处罚', '跌停']
+    pos = sum(1 for h in headlines for w in pos_words if w in h)
+    neg = sum(1 for h in headlines for w in neg_words if w in h)
+    sentiment = 'positive' if pos > neg else 'negative' if neg > pos else 'neutral'
+    return {'headlines': headlines, 'sentiment': sentiment}
+
+
+def calculate_score(fundamentals, technical, sentiment, news):
+    score = 50
+    val = fundamentals.get('valuation', '')
+    if val == 'undervalued':
+        score += 15
+    elif val == 'fair':
+        score += 5
+    elif val == 'overvalued':
+        score -= 10
+    trend = technical.get('trend', '')
+    if 'up' in trend:
+        score += 10
+    elif 'down' in trend:
+        score -= 10
+    signal = technical.get('signal', '')
+    if 'oversold' in signal:
+        score += 10
+    elif 'overbought' in signal:
+        score -= 5
+    ms = sentiment.get('market_sentiment', '')
+    if 'optimistic' in ms:
+        score += 5
+    elif 'panic' in ms:
+        score -= 10
+    ns = news.get('sentiment', '')
+    if 'positive' in ns:
+        score += 5
+    elif 'negative' in ns:
+        score -= 5
+    score = max(0, min(100, score))
+    
+    if score >= 75:
+        rec = "强烈推荐买入"
+    elif score >= 60:
+        rec = "买入"
+    elif score >= 40:
+        rec = "持有"
+    else:
+        rec = "卖出"
+    
+    return score, rec
+
+
+@app.post("/api/analyze", response_model=StockAnalysisResult)
+async def analyze_stock(request: StockAnalysisRequest, current_user: User = Depends(get_current_user)):
+    """股票分析接口（需要认证）"""
+    try:
+        code = request.code
+        name = request.name
+        
+        if not code:
+            return StockAnalysisResult(
+                success=False,
+                message="股票代码不能为空",
+                code=code,
+                name=name,
+                quote=None,
+                fundamentals=None,
+                technical=None,
+                sentiment=None,
+                news=None,
+                score=None,
+                recommendation=None
+            )
+        
+        if not HAS_REQUESTS:
+            return StockAnalysisResult(
+                success=False,
+                message="requests 库未安装",
+                code=code,
+                name=name,
+                quote=None,
+                fundamentals=None,
+                technical=None,
+                sentiment=None,
+                news=None,
+                score=None,
+                recommendation=None
+            )
+        
+        # 获取数据
+        data = fetch_stock_data(code, name)
+        
+        if not data.get('quote'):
+            return StockAnalysisResult(
+                success=False,
+                message="获取股票数据失败",
+                code=code,
+                name=name,
+                quote=None,
+                fundamentals=None,
+                technical=None,
+                sentiment=None,
+                news=None,
+                score=None,
+                recommendation=None
+            )
+        
+        # 分析
+        quote_data = parse_quote(data.get('quote', {}))
+        fundamentals = analyze_fundamentals(data)
+        technical = analyze_technical(data)
+        sentiment = analyze_sentiment(data)
+        news = analyze_news(data)
+        score, recommendation = calculate_score(fundamentals, technical, sentiment, news)
+        
+        return StockAnalysisResult(
+            success=True,
+            message="分析完成",
+            code=code,
+            name=name,
+            quote=quote_data,
+            fundamentals=fundamentals,
+            technical=technical,
+            sentiment=sentiment,
+            news=news,
+            score=score,
+            recommendation=recommendation
+        )
+        
+    except Exception as e:
+        print(f"股票分析错误: {e}")
+        import traceback
+        traceback.print_exc()
+        return StockAnalysisResult(
+            success=False,
+            message=f"分析失败: {str(e)}",
+            code=request.code,
+            name=request.name,
+            quote=None,
+            fundamentals=None,
+            technical=None,
+            sentiment=None,
+            news=None,
+            score=None,
+            recommendation=None
+        )
 
 
 # 启动时初始化数据库
