@@ -111,6 +111,11 @@ function BacktestApp({ onLogout }) {
   const [analyzeResult, setAnalyzeResult] = useState(null);
   const [analyzeLoading, setAnalyzeLoading] = useState(false);
 
+  const [teamAnalyzeCode, setTeamAnalyzeCode] = useState('');
+  const [teamAnalyzeName, setTeamAnalyzeName] = useState('');
+  const [teamAnalyzeResult, setTeamAnalyzeResult] = useState(null);
+  const [teamAnalyzeLoading, setTeamAnalyzeLoading] = useState(false);
+
   const formatCurrency = (value) => {
     return new Intl.NumberFormat('zh-CN', {
       style: 'currency',
@@ -259,6 +264,12 @@ function BacktestApp({ onLogout }) {
                 onClick={() => setActiveTab('analyze')}
               >
                 股票分析
+              </button>
+              <button 
+                className={`tab ${activeTab === 'team' ? 'active' : ''}`}
+                onClick={() => setActiveTab('team')}
+              >
+                AI 团队分析
               </button>
             </div>
             <button className="logout-btn" onClick={handleLogout}>
@@ -650,6 +661,132 @@ function BacktestApp({ onLogout }) {
           {!analyzeLoading && !analyzeResult && activeTab === 'analyze' && (
             <div className="status-message">
               <p>输入股票代码，点击"开始分析"进行股票分析</p>
+            </div>
+          )}
+
+          {activeTab === 'team' && (
+            <div className="control-panel">
+              <h2>AI 团队分析</h2>
+              <p className="section-desc">由 Claude Agent 智能体团队进行深度分析</p>
+              
+              <div className="input-group">
+                <div className="input-item">
+                  <label>股票代码</label>
+                  <input
+                    type="text"
+                    value={teamAnalyzeCode}
+                    onChange={(e) => setTeamAnalyzeCode(e.target.value)}
+                    placeholder="例如: 600519"
+                  />
+                </div>
+                <div className="input-item">
+                  <label>股票名称（可选）</label>
+                  <input
+                    type="text"
+                    value={teamAnalyzeName}
+                    onChange={(e) => setTeamAnalyzeName(e.target.value)}
+                    placeholder="例如: 贵州茅台"
+                  />
+                </div>
+              </div>
+              
+              <button 
+                className="submit-btn"
+                onClick={async () => {
+                  if (!teamAnalyzeCode) return;
+                  setTeamAnalyzeLoading(true);
+                  setTeamAnalyzeResult(null);
+                  try {
+                    const response = await apiRequest('/api/analyze-team', {
+                      method: 'POST',
+                      body: JSON.stringify({
+                        code: teamAnalyzeCode,
+                        name: teamAnalyzeName
+                      }),
+                    });
+                    
+                    if (response.status === 401) {
+                      removeToken();
+                      onLogout();
+                      return;
+                    }
+                    
+                    const data = await response.json();
+                    setTeamAnalyzeResult(data);
+                  } catch (err) {
+                    console.error('团队分析错误:', err);
+                  } finally {
+                    setTeamAnalyzeLoading(false);
+                  }
+                }}
+                disabled={teamAnalyzeLoading || !teamAnalyzeCode}
+              >
+                {teamAnalyzeLoading ? '分析中...' : '开始 AI 团队分析'}
+              </button>
+
+              {teamAnalyzeLoading && (
+                <div className="loading-container">
+                  <div className="spinner"></div>
+                  <p>AI 团队正在分析中，请稍候...</p>
+                  <p className="loading-hint">这可能需要几分钟时间</p>
+                </div>
+              )}
+
+              {teamAnalyzeResult && teamAnalyzeResult.success && (
+                <div className="analysis-result">
+                  <h3>{teamAnalyzeResult.code} {teamAnalyzeResult.name} - AI 团队分析报告</h3>
+                  
+                  <div className="report-section">
+                    <h4>📊 基本面分析</h4>
+                    <div className="report-content">{teamAnalyzeResult.fundamentals}</div>
+                  </div>
+                  
+                  <div className="report-section">
+                    <h4>📈 技术分析</h4>
+                    <div className="report-content">{teamAnalyzeResult.technical}</div>
+                  </div>
+                  
+                  <div className="report-section">
+                    <h4>💭 情绪分析</h4>
+                    <div className="report-content">{teamAnalyzeResult.sentiment}</div>
+                  </div>
+                  
+                  <div className="report-section">
+                    <h4>📰 新闻分析</h4>
+                    <div className="report-content">{teamAnalyzeResult.news}</div>
+                  </div>
+                  
+                  <div className="report-section bullish">
+                    <h4>🐂 多头观点</h4>
+                    <div className="report-content">{teamAnalyzeResult.bullish}</div>
+                  </div>
+                  
+                  <div className="report-section bearish">
+                    <h4>🐻 空头观点</h4>
+                    <div className="report-content">{teamAnalyzeResult.bearish}</div>
+                  </div>
+                  
+                  <div className="report-section risk">
+                    <h4>⚠️ 风险评估</h4>
+                    <div className="report-content">{teamAnalyzeResult.risk}</div>
+                  </div>
+                  
+                  <div className="report-section summary">
+                    <h4>📋 投资建议</h4>
+                    <div className="report-content">{teamAnalyzeResult.summary}</div>
+                  </div>
+                  
+                  <div className="analysis-disclaimer">
+                    <p>本分析仅供参考，不构成投资建议。股市有风险，投资需谨慎。</p>
+                  </div>
+                </div>
+              )}
+
+              {!teamAnalyzeLoading && !teamAnalyzeResult && (
+                <div className="status-message">
+                  <p>输入股票代码，点击"开始 AI 团队分析"进行深度分析</p>
+                </div>
+              )}
             </div>
           )}
         </div>

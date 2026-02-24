@@ -22,6 +22,7 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, Session
 
 from data_fetcher import fetch_and_save_data, get_historical_data
+from agent_service import analyze_stock_team
 
 # 尝试导入 requests
 try:
@@ -859,6 +860,83 @@ async def analyze_stock(request: StockAnalysisRequest, current_user: User = Depe
             news=None,
             score=None,
             recommendation=None
+        )
+
+
+class TeamAnalysisResult(BaseModel):
+    success: bool
+    message: str
+    code: str
+    name: str
+    fundamentals: Optional[str]
+    technical: Optional[str]
+    sentiment: Optional[str]
+    news: Optional[str]
+    bullish: Optional[str]
+    bearish: Optional[str]
+    risk: Optional[str]
+    summary: Optional[str]
+
+
+@app.post("/api/analyze-team", response_model=TeamAnalysisResult)
+async def analyze_stock_team_endpoint(request: StockAnalysisRequest, current_user: User = Depends(get_current_user)):
+    """股票团队分析接口（需要认证）- 使用 Claude Agent 团队分析"""
+    try:
+        code = request.code
+        name = request.name
+        
+        if not code:
+            return TeamAnalysisResult(
+                success=False,
+                message="股票代码不能为空",
+                code=code,
+                name=name,
+                fundamentals=None,
+                technical=None,
+                sentiment=None,
+                news=None,
+                bullish=None,
+                bearish=None,
+                risk=None,
+                summary=None
+            )
+        
+        # 调用团队分析
+        import asyncio
+        result = await analyze_stock_team(code, name)
+        
+        return TeamAnalysisResult(
+            success=True,
+            message="团队分析完成",
+            code=code,
+            name=name,
+            fundamentals=result.get("fundamentals"),
+            technical=result.get("technical"),
+            sentiment=result.get("sentiment"),
+            news=result.get("news"),
+            bullish=result.get("bullish"),
+            bearish=result.get("bearish"),
+            risk=result.get("risk"),
+            summary=result.get("summary")
+        )
+        
+    except Exception as e:
+        print(f"团队分析错误: {e}")
+        import traceback
+        traceback.print_exc()
+        return TeamAnalysisResult(
+            success=False,
+            message=f"团队分析失败: {str(e)}",
+            code=request.code,
+            name=request.name,
+            fundamentals=None,
+            technical=None,
+            sentiment=None,
+            news=None,
+            bullish=None,
+            bearish=None,
+            risk=None,
+            summary=None
         )
 
 

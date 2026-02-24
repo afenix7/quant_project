@@ -596,3 +596,103 @@ code {
   color: #6e7681;
   font-size: 0.85rem;
 }
+
+.section-desc {
+  color: #8b949e;
+  margin-bottom: 20px;
+  font-size: 0.95rem;
+}
+
+.loading-container {
+  text-align: center;
+  padding: 40px 20px;
+}
+
+.loading-container .spinner {
+  width: 50px;
+  height: 50px;
+  border: 4px solid #30363d;
+  border-top-color: #58a6ff;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  margin: 0 auto 20px;
+}
+
+.loading-container p {
+  color: #c9d1d9;
+  font-size: 1rem;
+  margin-bottom: 8px;
+}
+
+.loading-hint {
+  color: #6e7681;
+  font-size: 0.85rem;
+}
+
+.report-section {
+  background: #0d1117;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+  border: 1px solid #30363d;
+}
+
+.report-section h4 {
+  color: #58a6ff;
+  margin-bottom: 12px;
+  font-size: 1rem;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.report-section.bullish {
+  border-left: 4px solid #3fb950;
+}
+
+.report-section.bullish h4 {
+  color: #3fb950;
+}
+
+.report-section.bearish {
+  border-left: 4px solid #f85149;
+}
+
+.report-section.bearish h4 {
+  color: #f85149;
+}
+
+.report-section.risk {
+  border-left: 4px solid #d29922;
+}
+
+.report-section.risk h4 {
+  color: #d29922;
+}
+
+.report-section.summary {
+  border-left: 4px solid #a371f7;
+  background: rgba(163, 113, 247, 0.05);
+}
+
+.report-section.summary h4 {
+  color: #a371f7;
+}
+
+.report-content {
+  color: #c9d1d9;
+  font-size: 0.9rem;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.status-message {
+  text-align: center;
+  padding: 40px 20px;
+  color: #6e7681;
+}
+
+.status-message p {
+  font-size: 1rem;
+}
