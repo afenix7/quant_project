@@ -696,3 +696,95 @@ code {
 .status-message p {
   font-size: 1rem;
 }
+
+/* Markdown 渲染样式 */
+.report-content h1,
+.report-content h2,
+.report-content h3,
+.report-content h4,
+.report-content h5,
+.report-content h6 {
+  color: #c9d1d9;
+  margin-top: 1em;
+  margin-bottom: 0.5em;
+}
+
+.report-content h1 { font-size: 1.5rem; }
+.report-content h2 { font-size: 1.3rem; }
+.report-content h3 { font-size: 1.15rem; }
+.report-content h4 { font-size: 1rem; }
+
+.report-content p {
+  margin-bottom: 0.8em;
+  line-height: 1.6;
+}
+
+.report-content ul,
+.report-content ol {
+  padding-left: 1.5em;
+  margin-bottom: 0.8em;
+}
+
+.report-content li {
+  margin-bottom: 0.4em;
+  line-height: 1.5;
+}
+
+.report-content code {
+  background: #30363d;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.9em;
+}
+
+.report-content pre {
+  background: #0d1117;
+  padding: 12px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin-bottom: 0.8em;
+}
+
+.report-content pre code {
+  background: transparent;
+  padding: 0;
+}
+
+.report-content table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 0.8em;
+}
+
+.report-content th,
+.report-content td {
+  border: 1px solid #30363d;
+  padding: 8px 12px;
+  text-align: left;
+}
+
+.report-content th {
+  background: #161b22;
+  color: #58a6ff;
+}
+
+.report-content blockquote {
+  border-left: 4px solid #30363d;
+  padding-left: 1em;
+  margin-left: 0;
+  color: #8b949e;
+  margin-bottom: 0.8em;
+}
+
+.report-content strong {
+  color: #58a6ff;
+}
+
+.report-content a {
+  color: #58a6ff;
+  text-decoration: none;
+}
+
+.report-content a:hover {
+  text-decoration: underline;
+}

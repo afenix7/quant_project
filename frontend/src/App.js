@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, ComposedChart, Bar, Scatter } from 'recharts';
+import ReactMarkdown from 'react-markdown';
 import './App.css';
 
 const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:8000';
@@ -738,42 +739,58 @@ function BacktestApp({ onLogout }) {
                   
                   <div className="report-section">
                     <h4>📊 基本面分析</h4>
-                    <div className="report-content">{teamAnalyzeResult.fundamentals}</div>
+                    <div className="report-content">
+                      <ReactMarkdown>{teamAnalyzeResult.fundamentals}</ReactMarkdown>
+                    </div>
                   </div>
                   
                   <div className="report-section">
                     <h4>📈 技术分析</h4>
-                    <div className="report-content">{teamAnalyzeResult.technical}</div>
+                    <div className="report-content">
+                      <ReactMarkdown>{teamAnalyzeResult.technical}</ReactMarkdown>
+                    </div>
                   </div>
                   
                   <div className="report-section">
                     <h4>💭 情绪分析</h4>
-                    <div className="report-content">{teamAnalyzeResult.sentiment}</div>
+                    <div className="report-content">
+                      <ReactMarkdown>{teamAnalyzeResult.sentiment}</ReactMarkdown>
+                    </div>
                   </div>
                   
                   <div className="report-section">
                     <h4>📰 新闻分析</h4>
-                    <div className="report-content">{teamAnalyzeResult.news}</div>
+                    <div className="report-content">
+                      <ReactMarkdown>{teamAnalyzeResult.news}</ReactMarkdown>
+                    </div>
                   </div>
                   
                   <div className="report-section bullish">
                     <h4>🐂 多头观点</h4>
-                    <div className="report-content">{teamAnalyzeResult.bullish}</div>
+                    <div className="report-content">
+                      <ReactMarkdown>{teamAnalyzeResult.bullish}</ReactMarkdown>
+                    </div>
                   </div>
                   
                   <div className="report-section bearish">
                     <h4>🐻 空头观点</h4>
-                    <div className="report-content">{teamAnalyzeResult.bearish}</div>
+                    <div className="report-content">
+                      <ReactMarkdown>{teamAnalyzeResult.bearish}</ReactMarkdown>
+                    </div>
                   </div>
                   
                   <div className="report-section risk">
                     <h4>⚠️ 风险评估</h4>
-                    <div className="report-content">{teamAnalyzeResult.risk}</div>
+                    <div className="report-content">
+                      <ReactMarkdown>{teamAnalyzeResult.risk}</ReactMarkdown>
+                    </div>
                   </div>
                   
                   <div className="report-section summary">
                     <h4>📋 投资建议</h4>
-                    <div className="report-content">{teamAnalyzeResult.summary}</div>
+                    <div className="report-content">
+                      <ReactMarkdown>{teamAnalyzeResult.summary}</ReactMarkdown>
+                    </div>
                   </div>
                   
                   <div className="analysis-disclaimer">
