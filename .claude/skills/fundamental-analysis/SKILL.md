@@ -120,7 +120,7 @@ web_search(query="股票代码 股票名称 分红 送股 配股")
 
 ### 输出目录
 
-所有报告保存到: `~/uni-web/frontend-html/finance-analysis/reports/`
+所有报告保存到: `finance-analysis/reports/`
 
 ### 文件命名规则
 
