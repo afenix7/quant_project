@@ -3,7 +3,7 @@ import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsi
 import ReactMarkdown from 'react-markdown';
 import './App.css';
 
-const API_BASE = process.env.REACT_APP_API_BASE || 'http://localhost:8000';
+const API_BASE = process.env.REACT_APP_API_BASE || '/quant';
 
 // 认证工具函数
 const getToken = () => localStorage.getItem('auth_token');
